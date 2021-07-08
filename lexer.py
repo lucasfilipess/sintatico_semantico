@@ -49,7 +49,17 @@ class Lexer():
             if(c == ''):
                return Token(Tag.EOF, "EOF", self.n_line, self.n_column)
 
-            elif(c == ' ' or c == '\t' or c == '\n' or c == '\r'):
+            elif (c == ' ' or c == '\r'):
+               self.n_column = self.n_column + 1
+               estado = 1
+
+            elif (c == '\t'):
+               self.n_column = self.n_column + 3
+               estado = 1
+
+            elif (c == '\n'):
+               self.n_column = 0
+               self.n_line = self.n_line + 1
                estado = 1
 
             elif(c == '='):

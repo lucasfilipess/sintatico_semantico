@@ -4,14 +4,14 @@ from lexer import Lexer
 from parser import Parser
 
 if __name__ == "__main__":
-   lexer = Lexer('programa_teste.txt')
+   lexer = Lexer('program_test.pasc')
+   
    parser = Parser(lexer)
-
    parser.Programa()
-
    parser.lexer.closeFile()
-
+   
    print("\n=>Tabela de simbolos:")
+
    lexer.printTS()
    lexer.closeFile()
     

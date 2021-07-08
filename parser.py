@@ -1,189 +1,346 @@
 import sys
-import copy
-
 from tag import Tag
-from token import Token
-from lexer import Lexer
-from no import No
 
-class Parser():
+class Parser:
+    def __init__(self, analisador):
+        self.lexer = analisador
+        self.token = analisador.proxToken()
 
-   def __init__(self, lexer):
-      self.lexer = lexer
-      self.token = lexer.proxToken() # Leitura inicial obrigatoria do primeiro simbolo
-      if self.token is None: # erro no Lexer
+        if self.token is None:
+            sys.exit(0)
+
+    def sinalizaErroSintatico(self, message):
+        print("[Erro Sintatico] na linha " + str(self.token.getLinha()) + " e coluna " + str(
+            self.token.getColuna()) + ": ")
+        print(message, "\n")
         sys.exit(0)
 
-   def sinalizaErroSemantico(self, message):
-      print("[Erro Semantico] na linha " + str(self.token.getLinha()) + " e coluna " + str(self.token.getColuna()) + ": ")
-      print(message, "\n")
+    def advance(self):
+        print("[DEBUG] Token: ", self.token.toString(), "Linha: " + str(self.token.getLinha()) + " Coluna: " + str(self.token.getColuna()))
+        self.token = self.lexer.proxToken()
+        if self.token is None:  # erro no Lexer
+            sys.exit(0)
 
-   def sinalizaErroSintatico(self, message):
-      print("[Erro Sintatico] na linha " + str(self.token.getLinha()) + " e coluna " + str(self.token.getColuna()) + ": ")
-      print(message, "\n")
+    def skip(self, message):
+        self.sinalizaErroSintatico(message)
+        self.advance()
 
-   def advance(self):
-      print("[DEBUG] token: ", self.token.toString())
-      self.token = self.lexer.proxToken()
-      if self.token is None: # erro no Lexer
-        sys.exit(0)
-   
-   def skip(self, message):
-      self.sinalizaErroSintatico(message)
-      self.advance()
+    # verifica token esperado t
+    def eat(self, t):
+        if (self.token.getNome() == t):
+            self.advance()
+            return True
+        else:
+            return False
 
-   # verifica token esperado t 
-   def eat(self, t):
-      if(self.token.getNome() == t):
-         self.advance()
-         return True
-      else:
-         return False
+    def Programa(self):
+        if (not self.eat(Tag.KW_PROGRAM)):
+            self.sinalizaErroSintatico("Esperado \"program\", encontrado " + "\"" + self.token.getLexema() + "\"")
 
-   """
-   LEMBRETE:
-   Todas as decisoes do Parser, sao guiadas pela Tabela Preditiva (TP)
-   """
-
-   # Programa -> CMD EOF
-   def Programa(self):
-      self.Cmd()
-      if(self.token.getNome() != Tag.EOF):
-         self.sinalizaErroSintatico("Esperado \"EOF\"; encontrado " + "\"" + self.token.getLexema() + "\"")
-         sys.exit(0)
-
-   def Cmd(self):
-
-      # armazena token corrente, uma vez que o ID pode ser consumido
-      tempToken = copy.copy(self.token)
-
-      # Cmd -> if E then { CMD } CMD'
-      if(self.eat(Tag.KW_PROGRAM)):
-         if(not self.eat(Tag.ID)):
+        if (not self.eat(Tag.ID)):
             self.sinalizaErroSintatico("Esperado \"ID\", encontrado " + "\"" + self.token.getLexema() + "\"")
 
-      if(self.eat(Tag.KW_NUM) or self.eat(Tag.KW_CHAR)):
-         if(not self.eat(Tag.ID)):
-            self.sinalizaErroSintatico("Esperado \"ID\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        self.body()
 
-      if(self.eat(Tag.KW_IF)): 
-         noE = self.E()
-         if noE.tipo != Tag.BOOL:
-            self.sinalizaErroSemantico("Expressao mal formada.")
+    def body(self):
+        self.declList()
 
-         if(not self.eat(Tag.SMB_OBC)):
+        if (not self.eat(Tag.SMB_OBC)):
             self.sinalizaErroSintatico("Esperado \"{\", encontrado " + "\"" + self.token.getLexema() + "\"")
-         self.Cmd()
 
-         if(not self.eat(Tag.SMB_CBC)):
+        self.stmtList()
+
+        if (not self.eat(Tag.SMB_CBC)):
             self.sinalizaErroSintatico("Esperado \"}\", encontrado " + "\"" + self.token.getLexema() + "\"")
-         self.CmdLinha()
-      
-      if(self.eat(Tag.SMB_SEM)):
-         self.Cmd()
 
-      if(self.eat(Tag.SMB_OBC)):
-         self.Cmd()
-         # noE = self.E()
-         # if noE.tipo != Tag.BOOL:
-         #    self.sinalizaErroSemantico("Expressao mal formada.")
+    def declList(self):
+        if (self.token.getNome() != Tag.SMB_OBC):
+            self.decl()
 
-         # if(not self.eat(Tag.SMB_OBC)):
-         #    self.sinalizaErroSintatico("Esperado \"{\", encontrado " + "\"" + self.token.getLexema() + "\"")
-         # self.Cmd()
-         
-         # if(not self.eat(Tag.SMB_CBC)):
-         #    self.sinalizaErroSintatico("Esperado \"}\", encontrado " + "\"" + self.token.getLexema() + "\"")
-         # self.CmdLinha()
-      if(self.eat(Tag.OP_DIV)):
-         self.Cmd()
+            if (not self.eat(Tag.SMB_SEM)):
+                self.sinalizaErroSintatico("Esperado \";\", encontrado " + "\"" + self.token.getLexema() + "\"")
 
-      # Cmd -> id = T
-      elif(self.eat(Tag.ID)):
-         if(not self.eat(Tag.OP_ATRIB)):
+            self.declList()
+
+            return True
+        else:
+            return False
+
+    def decl(self):
+        self.type()
+        self.idList()
+
+    def type(self):
+        if(self.token.getLexema() == 'num'):
+            self.eat(Tag.KW_NUM)
+        elif (self.token.getLexema() == 'char'):
+            self.eat(Tag.KW_CHAR)
+        else:
+            self.sinalizaErroSintatico("Esperado \"num, char\", encontrado " + "\"" + self.token.getLexema() + "\"")
+
+    def idList(self):
+        if (not self.eat(Tag.ID)):
+            self.sinalizaErroSintatico("Esperado \"ID\", encontrado " + "\"" + self.token.getLexema() + "\"")
+
+        self.idListLinha()
+
+    def idListLinha(self):
+        if (self.token.getNome() != Tag.SMB_SEM):
+            if (not self.eat(Tag.SMB_COM)):
+                self.sinalizaErroSintatico("Esperado \", | ;\", encontrado " + "\"" + self.token.getLexema() + "\"")
+            self.idList()
+            return True
+        else:
+            return False
+
+    def stmtList(self):
+        if (self.token.getNome() != Tag.SMB_CBC):
+            self.stmt()
+            if (not self.eat(Tag.SMB_SEM)):
+                self.sinalizaErroSintatico("Esperado \";\", encontrado " + "\"" + self.token.getLexema() + "\"")
+            self.stmtList()
+            return True
+        else:
+            return False
+
+    def stmt(self):
+        if (self.token.getNome() == Tag.ID):
+            self.assignStmt()
+        elif (self.token.getNome() == Tag.KW_IF):
+            self.ifStmt()
+        elif (self.token.getNome() == Tag.KW_WHILE):
+            self.whileStmt()
+        elif (self.token.getNome() == Tag.KW_READ):
+            self.readStmt()
+        elif (self.token.getNome() == Tag.KW_WRITE):
+            self.writeStmt()
+        else:
+            self.sinalizaErroSintatico("Esperado \"ID, IF, WHILE, READ, WRITE\", encontrado " + "\"" + self.token.getLexema() + "\"")
+
+    def assignStmt(self):
+        if (not self.eat(Tag.ID)):
+            self.sinalizaErroSintatico("Esperado \"ID\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        if (not self.eat(Tag.OP_ATRIB)):
             self.sinalizaErroSintatico("Esperado \"=\", encontrado " + "\"" + self.token.getLexema() + "\"")
-       
-         noT = self.T()
+        self.simpleExpr()
 
-         if noT.tipo == Tag.NUM:
-            self.lexer.ts.removeToken(tempToken.getLexema())
-            tempToken.setTipo(noT.tipo)
-            self.lexer.ts.addToken(tempToken.getLexema(), tempToken)
-         elif noT.tipo == Tag.CHAR:
-            self.lexer.ts.removeToken(tempToken.getLexema())
-            tempToken.setTipo(noT.tipo)
-            self.lexer.ts.addToken(tempToken.getLexema(), tempToken)
-         else:
-            self.sinalizaErroSemantico("Variável não declarada antes de atribuição")
-
-   def CmdLinha(self):
-      # CmdLinha -> else { CMD }
-      if(self.eat(Tag.KW_ELSE)):
-         if(not self.eat(Tag.SMB_OBC)):
+    def ifStmt(self):
+        if (not self.eat(Tag.KW_IF)):
+            self.sinalizaErroSintatico("Esperado \"IF\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        if (not self.eat(Tag.SMB_OPA)):
+            self.sinalizaErroSintatico("Esperado \"(\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        self.expression()
+        if (not self.eat(Tag.SMB_CPA)):
+            self.sinalizaErroSintatico("Esperado \")\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        if (not self.eat(Tag.SMB_OBC)):
             self.sinalizaErroSintatico("Esperado \"{\", encontrado " + "\"" + self.token.getLexema() + "\"")
-         self.Cmd()
-         if(not self.eat(Tag.SMB_CBC)):
+        self.stmtList()
+        if (not self.eat(Tag.SMB_CBC)):
             self.sinalizaErroSintatico("Esperado \"}\", encontrado " + "\"" + self.token.getLexema() + "\"")
-      # CmdLinha -> epsilon
-      elif(self.token.getNome() == Tag.SMB_CBC or self.token.getNome() == Tag.EOF or self.token.getNome() == Tag.SMB_SEM ):
-         return
-      else:
-         self.skip("Esperado \"else, }\", encontrado " + "\"" + self.token.getLexema() + "\"")
-         sys.exit(0)
+        self.ifStmtLinha()
 
-   # E -> T T'
-   def E(self):
-      noE = No()
-      if(self.token.getNome() == Tag.ID or self.token.getNome() == Tag.NUM_CONST or self.token.getNome() == Tag.CHAR_CONST ):
-         noT = self.T()
-         noTLinha = self.TLinha()
-         if noTLinha.tipo == Tag.VOID:
-            noE.tipo = noT.tipo
+    def ifStmtLinha(self):
+        if (self.token.getNome() != Tag.SMB_SEM):
+            if (not self.eat(Tag.KW_ELSE)):
+                self.sinalizaErroSintatico("Esperado \"else\", encontrado " + "\"" + self.token.getLexema() + "\"")
+            if (not self.eat(Tag.SMB_OBC)):
+                self.sinalizaErroSintatico("Esperado \"{\", encontrado " + "\"" + self.token.getLexema() + "\"")
+            self.stmtList()
+            if (not self.eat(Tag.SMB_CBC)):
+                self.sinalizaErroSintatico("Esperado \"}\", encontrado " + "\"" + self.token.getLexema() + "\"")
+            return True
+        else:
+            return False
 
-         elif noTLinha.tipo == noT.tipo and noT.tipo == Tag.NUM:
-            noE.tipo = Tag.BOOL
-            
-         elif noTLinha.tipo == noT.tipo and noT.tipo == Tag.CHAR:
-            noE.tipo = Tag.BOOL
-          
-         else:
-            noE.tipo = Tag.ERRO
-            return noE
-      else:
-         self.sinalizaErroSintatico("Esperado \"id, numero\", encontrado " + "\"" + self.token.getLexema() + "\"")
-         sys.exit(0)
+    def whileStmt(self):
+        self.stmtPrefix()
+        if (not self.eat(Tag.SMB_OBC)):
+            self.sinalizaErroSintatico("Esperado \"{\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        self.stmtList()
+        if (not self.eat(Tag.SMB_CBC)):
+            self.sinalizaErroSintatico("Esperado \"}\", encontrado " + "\"" + self.token.getLexema() + "\"")
 
-   '''
-   Mudei um pouco essa implementacao para ficar mais simples.
-   T' --> ">" T  | "<" T | ">=" T | 
-          "<=" T | "==" T | "!=" T| epsilon
-   '''
-   def TLinha(self):
-      noTLinha = No()
-      if(self.eat(Tag.OP_GT) or self.eat(Tag.OP_LT) or self.eat(Tag.OP_GE) or 
-         self.eat(Tag.OP_LE) or self.eat(Tag.OP_EQ) or self.eat(Tag.OP_NE)):
-        noT = self.T()
-        noTLinha.tipo = noT.tipo
-        return noTLinha
-      else:
-         self.skip("Esperado \">, <, >=, <=, ==, !=, then\", encontrado " + "\"" + self.token.getLexema() + "\"")
-         sys.exit(0)
+    def stmtPrefix(self):
+        if (not self.eat(Tag.KW_WHILE)):
+            self.sinalizaErroSintatico("Esperado \"while\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        if (not self.eat(Tag.SMB_OPA)):
+            self.sinalizaErroSintatico("Esperado \"(\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        self.expression()
+        if (not self.eat(Tag.SMB_CPA)):
+            self.sinalizaErroSintatico("Esperado \")\", encontrado " + "\"" + self.token.getLexema() + "\"")
 
-   # T -> id | num
-   def T(self):
-      noT = No()
+    def readStmt(self):
+        if (not self.eat(Tag.KW_READ)):
+            self.sinalizaErroSintatico("Esperado \"read\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        if (not self.eat(Tag.ID)):
+            self.sinalizaErroSintatico("Esperado \"ID\", encontrado " + "\"" + self.token.getLexema() + "\"")
 
-      # armazena token corrente, uma vez que o ID pode ser consumido
-      tempToken = copy.copy(self.token) 
+    def writeStmt(self):
+        if (not self.eat(Tag.KW_WRITE)):
+            self.sinalizaErroSintatico("Esperado \"write\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        self.simpleExpr()
 
-      if(self.eat(Tag.ID)):
-          noT.tipo = tempToken.getTipo()
-      elif(self.eat(Tag.NUM_CONST)):
-         noT.tipo = Tag.NUM
-      elif(self.eat(Tag.CHAR_CONST)):
-         noT.tipo = Tag.CHAR
-      else:
-        self.skip("Esperado \"numero, id\", encontrado "  + "\"" + self.token.getLexema() + "\"")
-        sys.exit(0)
+    def expression(self):
+        self.simpleExpr()
+        self.expressionLinha()
 
-      return noT
+    def expressionLinha(self):
+        if (self.token.getNome() != Tag.SMB_CPA):
+            self.logop()
+            self.simpleExpr()
+            self.expressionLinha()
+            return True
+        else:
+            return False
+
+    def simpleExpr(self):
+        self.term()
+        self.simpleExprLinha()
+
+    def simpleExprLinha(self):
+        if (self.token.getNome() != Tag.KW_OR and
+            self.token.getNome() != Tag.KW_AND and
+            self.token.getNome() != Tag.SMB_CPA and
+            self.token.getNome() != Tag.SMB_SEM ):
+
+            self.relop()
+            self.term()
+            self.simpleExprLinha()
+            return True
+        else:
+            return False
+
+    def term(self):
+        self.factorB()
+        self.termLinha()
+
+    def termLinha(self):
+        if (self.token.getNome() != Tag.OP_EQ and
+            self.token.getNome() != Tag.OP_GT and
+            self.token.getNome() != Tag.OP_GE and
+            self.token.getNome() != Tag.OP_LT and
+            self.token.getNome() != Tag.OP_LE and
+            self.token.getNome() != Tag.OP_NE and
+            self.token.getNome() != Tag.KW_OR and
+            self.token.getNome() != Tag.KW_AND and
+            self.token.getNome() != Tag.SMB_CPA and
+            self.token.getNome() != Tag.SMB_SEM):
+
+            self.addop()
+            self.factorB()
+            self.termLinha()
+            return True
+        else:
+            return False
+
+    def factorB(self):
+        self.factorA()
+        self.factorBLinha()
+
+    def factorBLinha(self):
+        if (self.token.getNome() != Tag.OP_AD and
+            self.token.getNome() != Tag.OP_MIN and
+            self.token.getNome() != Tag.OP_EQ and
+            self.token.getNome() != Tag.OP_GT and
+            self.token.getNome() != Tag.OP_GE and
+            self.token.getNome() != Tag.OP_LT and
+            self.token.getNome() != Tag.OP_LE and
+            self.token.getNome() != Tag.OP_NE and
+            self.token.getNome() != Tag.KW_OR and
+            self.token.getNome() != Tag.KW_AND and
+            self.token.getNome() != Tag.SMB_CPA and
+            self.token.getNome() != Tag.SMB_SEM):
+
+            self.mulop()
+            self.factorA()
+            self.factorBLinha()
+            return True
+        else:
+            return False
+
+    def factorA(self):
+        if (self.token.getNome() == Tag.ID or
+            self.token.getNome() == Tag.CHAR_CONST or
+            self.token.getNome() == Tag.NUM_CONST or
+            self.token.getNome() == Tag.SMB_OPA):
+
+            self.factor()
+        else:
+            if (not self.eat(Tag.KW_NOT)):
+                self.sinalizaErroSintatico("Esperado \"not\", encontrado " + "\"" + self.token.getLexema() + "\"")
+            self.factor()
+
+    def factor(self):
+        if(self.token.getNome() == Tag.ID):
+            if (not self.eat(Tag.ID)):
+                self.sinalizaErroSintatico("Esperado \"ID\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        elif (self.token.getNome() == Tag.CHAR_CONST or self.token.getNome() == Tag.NUM_CONST):
+            self.constant()
+        else:
+            if (not self.eat(Tag.SMB_OPA)):
+                self.sinalizaErroSintatico("Esperado \"(\", encontrado " + "\"" + self.token.getLexema() + "\"")
+            self.expression()
+            if (not self.eat(Tag.SMB_CPA)):
+                self.sinalizaErroSintatico("Esperado \")\", encontrado " + "\"" + self.token.getLexema() + "\"")
+
+    def logop(self):
+        if (self.token.getNome() == Tag.KW_OR):
+            if (not self.eat(Tag.KW_OR)):
+                self.sinalizaErroSintatico("Esperado \"or\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        elif (self.token.getNome() == Tag.KW_AND):
+            if (not self.eat(Tag.KW_AND)):
+                self.sinalizaErroSintatico("Esperado \"and\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        else:
+            self.sinalizaErroSintatico("Esperado \"or, and\", encontrado " + "\"" + self.token.getLexema() + "\"")
+
+    def relop(self):
+        if (self.token.getNome() == Tag.OP_EQ):
+            if (not self.eat(Tag.OP_EQ)):
+                self.sinalizaErroSintatico("Esperado \"==\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        elif (self.token.getNome() == Tag.OP_GT):
+            if (not self.eat(Tag.OP_GT)):
+                self.sinalizaErroSintatico("Esperado \">\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        elif (self.token.getNome() == Tag.OP_GE):
+            if (not self.eat(Tag.OP_GE)):
+                self.sinalizaErroSintatico("Esperado \">=\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        elif (self.token.getNome() == Tag.OP_LT):
+            if (not self.eat(Tag.OP_LT)):
+                self.sinalizaErroSintatico("Esperado \"<\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        elif (self.token.getNome() == Tag.OP_LE):
+            if (not self.eat(Tag.OP_LE)):
+                self.sinalizaErroSintatico("Esperado \"<=\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        elif (self.token.getNome() == Tag.OP_NE):
+            if (not self.eat(Tag.OP_NE)):
+                self.sinalizaErroSintatico("Esperado \"!=\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        else:
+            self.sinalizaErroSintatico("Esperado \"==, >, >=, <, <=, !=\", encontrado " + "\"" + self.token.getLexema() + "\"")
+
+    def addop(self):
+        if (self.token.getNome() == Tag.OP_AD):
+            if (not self.eat(Tag.OP_AD)):
+                self.sinalizaErroSintatico("Esperado \"+\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        elif (self.token.getNome() == Tag.OP_MIN):
+            if (not self.eat(Tag.OP_MIN)):
+                self.sinalizaErroSintatico("Esperado \"-\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        else:
+            self.sinalizaErroSintatico("Esperado \"+ ou -\", encontrado " + "\"" + self.token.getLexema() + "\"")
+
+    def mulop(self):
+        if (self.token.getNome() == Tag.OP_MUL):
+            if (not self.eat(Tag.OP_MUL)):
+                self.sinalizaErroSintatico("Esperado \"*\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        elif (self.token.getNome() == Tag.OP_MIN):
+            if (not self.eat(Tag.OP_DIV)):
+                self.sinalizaErroSintatico("Esperado \"/\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        else:
+            self.sinalizaErroSintatico("Esperado \"* ou /\", encontrado " + "\"" + self.token.getLexema() + "\"")
+
+    def constant(self):
+        if (self.token.getNome() == Tag.NUM_CONST):
+            if (not self.eat(Tag.NUM_CONST)):
+                self.sinalizaErroSintatico("Esperado \"num\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        elif (self.token.getNome() == Tag.CHAR_CONST):
+            if (not self.eat(Tag.CHAR_CONST)):
+                self.sinalizaErroSintatico("Esperado \"char\", encontrado " + "\"" + self.token.getLexema() + "\"")
+        else:
+            self.sinalizaErroSintatico("Esperado \"num ou char\", encontrado " + "\"" + self.token.getLexema() + "\"")
