@@ -18,14 +18,13 @@ class Parser:
     def advance(self):
         print("[DEBUG] Token: ", self.token.toString(), "Linha: " + str(self.token.getLinha()) + " Coluna: " + str(self.token.getColuna()))
         self.token = self.lexer.proxToken()
-        if self.token is None:  # erro no Lexer
+        if self.token is None:  
             sys.exit(0)
 
     def skip(self, message):
         self.sinalizaErroSintatico(message)
         self.advance()
 
-    # verifica token esperado t
     def eat(self, t):
         if (self.token.getNome() == t):
             self.advance()
